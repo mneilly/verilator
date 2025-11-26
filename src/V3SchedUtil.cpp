@@ -89,7 +89,13 @@ AstNodeStmt* checkIterationLimit(AstNetlist* netlistp, const string& name, AstVa
     AstNodeExpr* const condp = new AstGt{flp, counterRefp, constp};
     AstIf* const ifp = new AstIf{flp, condp};
     ifp->branchPred(VBranchPred::BP_UNLIKELY);
-    ifp->addThensp(dumpCallp);
+    
+    // Use the unconditional dump call (stored as next statement) to show trigger info
+    // when convergence fails, so users can see which RTL paths caused the cycle
+    if (dumpCallp && dumpCallp->nextp()) {
+        ifp->addThensp(dumpCallp->nextp()->cloneTree(false));
+    }
+    
     AstCStmt* const stmtp = new AstCStmt{flp};
     ifp->addThensp(stmtp);
     const FileLine* const locp = netlistp->topModulep()->fileline();
@@ -97,7 +103,9 @@ AstNodeStmt* checkIterationLimit(AstNetlist* netlistp, const string& name, AstVa
     const std::string& line = std::to_string(locp->lineno());
     stmtp->add("VL_FATAL_MT(\"" + V3OutFormatter::quoteNameControls(file) + "\", " + line
                + ", \"\", \"" + name + " region did not converge after " + std::to_string(limit)
-               + " tries\");");
+               + " tries.\\n"
+               + "Verilator identified signal(s) involved in combinational cycles.\\n"
+               + "Review compiler warnings (UNOPTFLAT) for cycle path details.\");");
     return ifp;
 }
 
