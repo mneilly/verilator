@@ -53,6 +53,9 @@ namespace V3Sched {
 // Global storage for cycle paths (defined here, declared in V3Sched.h)
 std::vector<CyclePathInfo> g_cyclePaths;
 
+// Global storage for struct field usage (defined here, declared in V3Sched.h)
+std::map<AstVarScope*, StructFieldUsage> g_structFieldUsage;
+
 namespace {
 
 // ##############################################################################

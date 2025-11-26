@@ -100,6 +100,7 @@ AstNodeStmt* checkIterationLimit(AstNetlist* netlistp, const string& name, AstVa
     AstCStmt* const cycleStmt = new AstCStmt{flp};
     cycleStmt->add("#ifdef VL_DEBUG\n");
     cycleStmt->add("__VlPrintCyclePaths();\n");
+    cycleStmt->add("__VlPrintStructFieldIssues();\n");
     cycleStmt->add("#endif\n");
     ifp->addThensp(cycleStmt);
     

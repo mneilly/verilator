@@ -109,6 +109,7 @@ class EmitCSyms final : EmitCBaseVisitorConst {
     void emitSymHdr();
     void emitSymImpPreamble();
     void emitCyclePaths();
+    void emitStructFieldUsage();
     void emitScopeHier(std::vector<std::string>& stmts, bool destroy);
     void emitSymImp(const AstNetlist* netlistp);
     void emitDpiHdr();
@@ -694,6 +695,112 @@ void EmitCSyms::emitCyclePaths() {
     puts("\n");
 }
 
+void EmitCSyms::emitStructFieldUsage() {
+    // Emit struct field usage information for runtime diagnostics (VL_DEBUG only)
+    const std::map<AstVarScope*, V3Sched::StructFieldUsage>& fieldUsage 
+        = V3Sched::g_structFieldUsage;
+    if (fieldUsage.empty()) return;
+
+    puts("\n");
+    puts("#ifdef VL_DEBUG\n");
+    puts("// Struct field usage information for cycle diagnostics\n");
+    puts("\n");
+    
+    // Emit the field info structure
+    puts("struct VlStructFieldInfo {\n");
+    puts("    const char* structName;\n");
+    puts("    const char* blockLocation;\n");
+    puts("    uint64_t fieldsUsedInBlock;      // Bitmask of fields actually read\n");
+    puts("    uint64_t fieldsInSensitivity;    // Bitmask of fields in @() sensitivity\n");
+    puts("    const char* const* fieldNames;   // Array of field names\n");
+    puts("    uint32_t numFields;               // Number of fields\n");
+    puts("};\n");
+    puts("\n");
+
+    // Emit field name arrays for each struct
+    int structIdx = 0;
+    for (const auto& pair : fieldUsage) {
+        const V3Sched::StructFieldUsage& usage = pair.second;
+        if (usage.fieldNames.empty()) continue;
+        
+        puts("static const char* const __VlStructFieldNames_" + std::to_string(structIdx) 
+             + "[] = {\n");
+        for (const std::string& name : usage.fieldNames) {
+            puts("    \"" + V3OutFormatter::quoteNameControls(name) + "\",\n");
+        }
+        puts("    nullptr\n");
+        puts("};\n");
+        puts("\n");
+        structIdx++;
+    }
+
+    // Emit the field usage table
+    puts("static const VlStructFieldInfo __VlStructFields[] = {\n");
+    structIdx = 0;
+    for (const auto& pair : fieldUsage) {
+        const AstVarScope* vscp = pair.first;
+        const V3Sched::StructFieldUsage& usage = pair.second;
+        
+        if (usage.fieldNames.empty()) continue;
+        
+        std::string structName = vscp->prettyName();
+        std::string location = usage.blockLocation 
+            ? (usage.blockLocation->filename() + ":" + std::to_string(usage.blockLocation->lineno()))
+            : "unknown";
+        
+        structName = V3OutFormatter::quoteNameControls(structName);
+        location = V3OutFormatter::quoteNameControls(location);
+        
+        puts("    {\"" + structName + "\", \"" + location + "\", ");
+        puts("0x" + cvtToHex(usage.fieldsRead) + "ULL, ");
+        puts("0x" + cvtToHex(usage.fieldsInSensitivity) + "ULL, ");
+        puts("__VlStructFieldNames_" + std::to_string(structIdx) + ", ");
+        puts(std::to_string(usage.fieldNames.size()) + "},\n");
+        
+        structIdx++;
+    }
+    puts("    {nullptr, nullptr, 0, 0, nullptr, 0}  // Sentinel\n");
+    puts("};\n");
+    puts("\n");
+
+    // Emit global to track which fields changed at runtime
+    puts("static uint64_t __VlStructChangedFields[" + std::to_string(fieldUsage.size()) + "];\n");
+    puts("\n");
+
+    // Emit helper function to print struct field issues
+    puts("static void __VlPrintStructFieldIssues() {\n");
+    puts("    bool foundIssues = false;\n");
+    puts("    for (size_t i = 0; __VlStructFields[i].structName; ++i) {\n");
+    puts("        const VlStructFieldInfo& info = __VlStructFields[i];\n");
+    puts("        const uint64_t changedFields = __VlStructChangedFields[i];\n");
+    puts("        // Check for fields that changed but weren't used\n");
+    puts("        const uint64_t uselessChanges = changedFields & ~info.fieldsUsedInBlock;\n");
+    puts("        if (uselessChanges) {\n");
+    puts("            if (!foundIssues) {\n");
+    puts("                VL_DBG_MSGF(\"\\n=== STRUCT FIELD ANALYSIS ===\");\n");
+    puts("                foundIssues = true;\n");
+    puts("            }\n");
+    puts("            VL_DBG_MSGF(\"\\nWARNING: Useless triggering in struct '%s'\\n\",\n");
+    puts("                        info.structName);\n");
+    puts("            VL_DBG_MSGF(\"  Block: %s\\n\", info.blockLocation);\n");
+    puts("            VL_DBG_MSGF(\"  Fields changed but NOT used: \");\n");
+    puts("            for (uint32_t j = 0; j < info.numFields && j < 64; ++j) {\n");
+    puts("                if (uselessChanges & (1ULL << j)) {\n");
+    puts("                    VL_DBG_MSGF(\"%s \", info.fieldNames[j]);\n");
+    puts("                }\n");
+    puts("            }\n");
+    puts("            VL_DBG_MSGF(\"\\n\");\n");
+    puts("            VL_DBG_MSGF(\"  Consider splitting sensitivity to specific fields\\n\");\n");
+    puts("        }\n");
+    puts("    }\n");
+    puts("    if (foundIssues) VL_DBG_MSGF(\"\\n\");\n");
+    puts("}\n");
+    puts("\n");
+    
+    puts("#endif  // VL_DEBUG\n");
+    puts("\n");
+}
+
 void EmitCSyms::emitScopeHier(std::vector<std::string>& stmts, bool destroy) {
     if (!v3Global.opt.vpi()) return;
 
@@ -1044,6 +1151,9 @@ void EmitCSyms::emitSymImp(const AstNetlist* netlistp) {
     
     // Emit cycle path information for debugging
     emitCyclePaths();
+    
+    // Emit struct field usage information for debugging
+    emitStructFieldUsage();
 
     // Constructor
     const std::string ctorArgs

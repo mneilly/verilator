@@ -81,6 +81,100 @@
 
 VL_DEFINE_DEBUG_FUNCTIONS;
 
+namespace {
+
+//######################################################################
+// Struct field usage analysis
+
+class StructFieldAnalyzer final : public VNVisitor {
+    // Analyze which struct fields are read/written in combinational logic
+    V3Sched::StructFieldUsage* m_currentUsage = nullptr;
+    AstNodeDType* m_currentStructDtp = nullptr;
+    bool m_inLValue = false;
+
+    // Get bit position for a field in a struct (max 64 fields supported)
+    uint32_t getFieldBitPosition(const AstNodeUOrStructDType* structDtp, const std::string& fieldName) {
+        uint32_t bitPos = 0;
+        for (const AstMemberDType* memberp = structDtp->membersp(); memberp;
+             memberp = VN_AS(memberp->nextp(), MemberDType)) {
+            if (memberp->name() == fieldName) return bitPos;
+            bitPos++;
+            if (bitPos >= 64) {
+                // Struct has more than 64 fields - diagnostics will only track first 64
+                return 63;  // Cap at 63
+            }
+        }
+        return 0;
+    }
+
+    // Get all field names from a struct
+    void extractFieldNames(const AstNodeUOrStructDType* structDtp,
+                          std::vector<std::string>& fieldNames) {
+        for (const AstMemberDType* memberp = structDtp->membersp(); memberp;
+             memberp = VN_AS(memberp->nextp(), MemberDType)) {
+            if (fieldNames.size() >= 64) break;
+            fieldNames.push_back(memberp->name());
+        }
+    }
+
+    void visit(AstNodeVarRef* nodep) override {
+        // Check if this is a struct variable reference
+        AstNodeDType* const dtypep = nodep->varp()->dtypep()->skipRefp();
+        if (const AstNodeUOrStructDType* const structDtp = VN_CAST(dtypep, NodeUOrStructDType)) {
+            // Whole struct referenced - mark all fields as used
+            auto& usage = V3Sched::g_structFieldUsage[nodep->varScopep()];
+            if (usage.structVscp == nullptr) {
+                usage.structVscp = nodep->varScopep();
+                extractFieldNames(structDtp, usage.fieldNames);
+            }
+            // Mark all fields as read or written
+            const uint64_t allFields = (1ULL << usage.fieldNames.size()) - 1;
+            if (nodep->access().isWriteOrRW()) {
+                usage.fieldsWritten |= allFields;
+            } else {
+                usage.fieldsRead |= allFields;
+            }
+        }
+    }
+
+    void visit(AstMemberSel* nodep) override {
+        // Track individual field access
+        AstNodeDType* const fromDtp = nodep->fromp()->dtypep()->skipRefp();
+        if (const AstNodeUOrStructDType* const structDtp = VN_CAST(fromDtp, NodeUOrStructDType)) {
+            // Get the base variable
+            if (AstVarRef* const varrefp = VN_CAST(nodep->fromp(), VarRef)) {
+                auto& usage = V3Sched::g_structFieldUsage[varrefp->varScopep()];
+                if (usage.structVscp == nullptr) {
+                    usage.structVscp = varrefp->varScopep();
+                    extractFieldNames(structDtp, usage.fieldNames);
+                }
+                
+                const uint32_t fieldBit = getFieldBitPosition(structDtp, nodep->name());
+                const uint64_t fieldMask = 1ULL << fieldBit;
+                
+                if (nodep->access().isWriteOrRW()) {
+                    usage.fieldsWritten |= fieldMask;
+                } else {
+                    usage.fieldsRead |= fieldMask;
+                }
+            }
+        }
+        iterateChildren(nodep);
+    }
+
+    void visit(AstNode* nodep) override {
+        iterateChildren(nodep);
+    }
+
+public:
+    explicit StructFieldAnalyzer(AstNode* nodep) {
+        iterate(nodep);
+    }
+    ~StructFieldAnalyzer() = default;
+};
+
+}  // namespace
+
 void V3Order::orderOrderGraph(OrderGraph& graph, const std::string& tag) {
     // Dump data
     if (dumpGraphLevel()) graph.dumpDotFilePrefixed(tag + "_orderg_pre");
@@ -108,6 +202,14 @@ AstCFunc* V3Order::order(AstNetlist* netlistp,  //
                          const ExternalDomainsProvider& externalDomains) {
     // Build the OrderGraph
     const std::unique_ptr<OrderGraph> graph = buildOrderGraph(netlistp, logic, trigToSen);
+    
+    // Analyze struct field usage for runtime diagnostics (VL_DEBUG only)
+    for (auto* const lbsp : logic) {
+        lbsp->foreachLogic([](AstNode* logicp) {
+            StructFieldAnalyzer{logicp};
+        });
+    }
+    
     // Order it
     orderOrderGraph(*graph, tag);
     // Assign sensitivity domains to combinational logic
