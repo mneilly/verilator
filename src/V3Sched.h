@@ -411,6 +411,16 @@ void splitCheck(AstCFunc* ofuncp);
 AstIf* createIfFromSenTree(AstSenTree* senTreep);
 }  // namespace util
 
+// Structure to hold cycle path information for runtime diagnostics
+struct CyclePathInfo final {
+    std::vector<AstVarScope*> path;       // Variables in the cycle
+    std::vector<FileLine*> locations;     // Where each dependency occurs
+    bool involvesStruct = false;          // Does path include structs?
+};
+
+// Global storage for cycle paths (populated during scheduling, emitted during code generation)
+extern std::vector<CyclePathInfo> g_cyclePaths;
+
 }  // namespace V3Sched
 
 #endif  // Guard

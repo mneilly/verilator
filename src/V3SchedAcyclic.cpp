@@ -50,6 +50,9 @@ VL_DEFINE_DEBUG_FUNCTIONS;
 
 namespace V3Sched {
 
+// Global storage for cycle paths (defined here, declared in V3Sched.h)
+std::vector<CyclePathInfo> g_cyclePaths;
+
 namespace {
 
 // ##############################################################################
@@ -337,6 +340,32 @@ void reportCycles(Graph* graphp, const std::vector<SchedAcyclicVarVertex*>& cutV
     for (SchedAcyclicVarVertex* vvtxp : cutVertices) {
         AstVarScope* const vscp = vvtxp->vscp();
         FileLine* const flp = vscp->fileline();
+
+        // Extract cycle path information for runtime diagnostics
+        const std::vector<V3GraphVertex*> cyclePath
+            = graphp->extractLoopPath(&V3GraphEdge::followAlwaysTrue, vvtxp);
+        
+        if (!cyclePath.empty()) {
+            CyclePathInfo pathInfo;
+            bool involvesStruct = false;
+            
+            for (V3GraphVertex* vtxp : cyclePath) {
+                if (SchedAcyclicVarVertex* varvtxp = vtxp->cast<SchedAcyclicVarVertex>()) {
+                    pathInfo.path.push_back(varvtxp->vscp());
+                    pathInfo.locations.push_back(varvtxp->vscp()->fileline());
+                    
+                    // Check if this variable is a struct
+                    AstNodeDType* const dtypep = varvtxp->varp()->dtypep()->skipRefp();
+                    if (VN_IS(dtypep, NodeUOrStructDType)) {
+                        involvesStruct = true;
+                    }
+                }
+            }
+            pathInfo.involvesStruct = involvesStruct;
+            
+            // Store for code emission
+            g_cyclePaths.push_back(pathInfo);
+        }
 
         // First v3warn not inside warnIsOff so we can see the suppressions with --debug
         if (flp->warnIsOff(V3ErrorCode::UNOPTFLAT)) {

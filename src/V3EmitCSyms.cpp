@@ -20,6 +20,7 @@
 #include "V3EmitCBase.h"
 #include "V3ExecGraph.h"
 #include "V3LanguageWords.h"
+#include "V3Sched.h"
 #include "V3StackCount.h"
 #include "V3Stats.h"
 
@@ -107,6 +108,7 @@ class EmitCSyms final : EmitCBaseVisitorConst {
     // METHODS
     void emitSymHdr();
     void emitSymImpPreamble();
+    void emitCyclePaths();
     void emitScopeHier(std::vector<std::string>& stmts, bool destroy);
     void emitSymImp(const AstNetlist* netlistp);
     void emitDpiHdr();
@@ -597,6 +599,101 @@ void EmitCSyms::emitSymImpPreamble() {
     if (needsNewLine) puts("\n");
 }
 
+void EmitCSyms::emitCyclePaths() {
+    // Emit cycle path information for runtime diagnostics (VL_DEBUG only)
+    const std::vector<V3Sched::CyclePathInfo>& cyclePaths = V3Sched::g_cyclePaths;
+    if (cyclePaths.empty()) return;
+
+    puts("\n");
+    puts("#ifdef VL_DEBUG\n");
+    puts("// Cycle path information for runtime diagnostics\n");
+    puts("\n");
+    
+    // Emit the path entry structure
+    puts("struct VlCyclePathEntry {\n");
+    puts("    const char* varName;\n");
+    puts("    const char* fileLine;\n");
+    puts("    const VlCyclePathEntry* next;  // Next in path, nullptr if end of cycle\n");
+    puts("};\n");
+    puts("\n");
+
+    // Emit all path entries
+    int entryIdx = 0;
+    std::vector<int> cycleStarts;  // Track where each cycle starts
+    
+    for (const V3Sched::CyclePathInfo& pathInfo : cyclePaths) {
+        if (pathInfo.path.empty()) continue;
+        
+        cycleStarts.push_back(entryIdx);
+        const size_t pathSize = pathInfo.path.size();
+        
+        for (size_t i = 0; i < pathSize; ++i) {
+            const AstVarScope* vscp = pathInfo.path[i];
+            const FileLine* flp = pathInfo.locations[i];
+            
+            std::string varName = vscp->prettyName();
+            std::string location = flp ? (flp->filename() + ":" + std::to_string(flp->lineno())) 
+                                       : "unknown";
+            
+            // Escape quotes in names and locations
+            varName = V3OutFormatter::quoteNameControls(varName);
+            location = V3OutFormatter::quoteNameControls(location);
+            
+            // Calculate next entry index (wraps back to start for cycle)
+            const int nextIdx = (i + 1 < pathSize) ? (entryIdx + 1) : cycleStarts.back();
+            
+            if (i == 0) {
+                puts("static const VlCyclePathEntry __VlCyclePaths_" 
+                     + std::to_string(cycleStarts.back()) + "[] = {\n");
+            }
+            
+            puts("    {\"" + varName + "\", \"" + location + "\", ");
+            if (i + 1 < pathSize) {
+                puts("&__VlCyclePaths_" + std::to_string(cycleStarts.back()) + "[" 
+                     + std::to_string(i + 1) + "]");
+            } else {
+                // Last entry points back to first (cycle)
+                puts("&__VlCyclePaths_" + std::to_string(cycleStarts.back()) + "[0]");
+            }
+            puts("},\n");
+            
+            entryIdx++;
+        }
+        puts("};\n");
+        puts("\n");
+    }
+
+    // Emit array of cycle starts
+    puts("static const VlCyclePathEntry* __VlCyclePathStarts[] = {\n");
+    for (int startIdx : cycleStarts) {
+        puts("    __VlCyclePaths_" + std::to_string(startIdx) + ",\n");
+    }
+    puts("    nullptr  // Sentinel\n");
+    puts("};\n");
+    puts("\n");
+
+    // Emit helper function to print cycle paths
+    puts("static void __VlPrintCyclePaths() {\n");
+    puts("    VL_DBG_MSGF(\"\\n=== COMBINATIONAL CYCLE PATHS ===\");\n");
+    puts("    for (const VlCyclePathEntry** pathp = __VlCyclePathStarts; *pathp; ++pathp) {\n");
+    puts("        VL_DBG_MSGF(\"\\nCycle detected: \");\n");
+    puts("        const VlCyclePathEntry* entry = *pathp;\n");
+    puts("        const VlCyclePathEntry* first = entry;\n");
+    puts("        do {\n");
+    puts("            VL_DBG_MSGF(\"%s at %s\", entry->varName, entry->fileLine);\n");
+    puts("            entry = entry->next;\n");
+    puts("            if (entry && entry != first) VL_DBG_MSGF(\" -> \");\n");
+    puts("        } while (entry && entry != first);\n");
+    puts("        VL_DBG_MSGF(\" -> (cycles back)\\n\");\n");
+    puts("    }\n");
+    puts("    VL_DBG_MSGF(\"\\n\");\n");
+    puts("}\n");
+    puts("\n");
+    
+    puts("#endif  // VL_DEBUG\n");
+    puts("\n");
+}
+
 void EmitCSyms::emitScopeHier(std::vector<std::string>& stmts, bool destroy) {
     if (!v3Global.opt.vpi()) return;
 
@@ -944,6 +1041,9 @@ void EmitCSyms::emitSymImp(const AstNetlist* netlistp) {
 
     openNewOutputSourceFile(symClassName(), true, true, "Symbol table implementation internals");
     emitSymImpPreamble();
+    
+    // Emit cycle path information for debugging
+    emitCyclePaths();
 
     // Constructor
     const std::string ctorArgs

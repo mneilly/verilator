@@ -434,6 +434,12 @@ public:
     /// Side-effect: changes user()
     string reportLoops(V3EdgeFuncP edgeFuncp, V3GraphVertex* vertexp) VL_MT_DISABLED;
 
+    /// Extract structured loop path information starting where specified
+    /// Returns vector of vertices forming the cycle
+    /// Side-effect: changes user()
+    std::vector<V3GraphVertex*> extractLoopPath(V3EdgeFuncP edgeFuncp,
+                                                V3GraphVertex* vertexp) VL_MT_DISABLED;
+
     /// Build a subgraph of all loops starting where specified
     /// Side-effect: changes user()
     void subtreeLoops(V3EdgeFuncP edgeFuncp, V3GraphVertex* vertexp,

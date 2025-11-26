@@ -96,6 +96,13 @@ AstNodeStmt* checkIterationLimit(AstNetlist* netlistp, const string& name, AstVa
         ifp->addThensp(dumpCallp->nextp()->cloneTree(false));
     }
     
+    // Add cycle path diagnostics (VL_DEBUG only)
+    AstCStmt* const cycleStmt = new AstCStmt{flp};
+    cycleStmt->add("#ifdef VL_DEBUG\n");
+    cycleStmt->add("__VlPrintCyclePaths();\n");
+    cycleStmt->add("#endif\n");
+    ifp->addThensp(cycleStmt);
+    
     AstCStmt* const stmtp = new AstCStmt{flp};
     ifp->addThensp(stmtp);
     const FileLine* const locp = netlistp->topModulep()->fileline();
@@ -105,7 +112,11 @@ AstNodeStmt* checkIterationLimit(AstNetlist* netlistp, const string& name, AstVa
                + ", \"\", \"" + name + " region did not converge after " + std::to_string(limit)
                + " tries.\\n"
                + "Verilator identified signal(s) involved in combinational cycles.\\n"
-               + "Review compiler warnings (UNOPTFLAT) for cycle path details.\");");
+               + "Review compiler warnings (UNOPTFLAT) for cycle path details.\\n"
+               + "#ifdef VL_DEBUG\\n"
+               + "See above for detailed cycle path trace.\\n"
+               + "#endif\\n"
+               + "\");");
     return ifp;
 }
 

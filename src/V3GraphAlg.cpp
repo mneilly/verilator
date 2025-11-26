@@ -413,6 +413,67 @@ string V3Graph::reportLoops(V3EdgeFuncP edgeFuncp, V3GraphVertex* vertexp) {
 }
 
 //######################################################################
+// Algorithms - extract loop paths
+// Changes user()
+
+class GraphAlgExtractLoop final : GraphAlg<> {
+    // Extract the actual path of vertices forming a cycle
+    std::vector<V3GraphVertex*> m_path;  // The cycle path
+    bool m_done = false;
+
+    void main(V3GraphVertex* vertexp) {
+        // Clear existing data
+        m_graphp->userClearVertices();
+        m_path.reserve(20);  // Most cycles are short
+        vertexIterate(vertexp, 0);
+    }
+
+    void vertexIterate(V3GraphVertex* vertexp, uint32_t depth) {
+        if (m_done) return;
+
+        // Ensure path vector is large enough
+        while (m_path.size() <= depth) m_path.push_back(nullptr);
+        m_path[depth] = vertexp;
+
+        if (vertexp->user() == 1) {
+            // Found a cycle! Trim path to just the cycle portion
+            uint32_t cycleStart = 0;
+            for (uint32_t i = 0; i < depth; ++i) {
+                if (m_path[i] == vertexp) {
+                    cycleStart = i;
+                    break;
+                }
+            }
+            // Keep only the cycle vertices
+            m_path.erase(m_path.begin(), m_path.begin() + cycleStart);
+            m_path.resize(depth - cycleStart + 1);
+            m_done = true;
+            return;
+        }
+        if (vertexp->user() == 2) return;  // Already processed
+
+        vertexp->user(1);
+        for (V3GraphEdge& edge : vertexp->outEdges()) {
+            if (followEdge(&edge)) vertexIterate(edge.top(), depth + 1);
+        }
+        vertexp->user(2);
+    }
+
+public:
+    GraphAlgExtractLoop(V3Graph* graphp, V3EdgeFuncP edgeFuncp, V3GraphVertex* vertexp)
+        : GraphAlg<>{graphp, edgeFuncp} {
+        main(vertexp);
+    }
+    ~GraphAlgExtractLoop() = default;
+    const std::vector<V3GraphVertex*>& path() const { return m_path; }
+};
+
+std::vector<V3GraphVertex*> V3Graph::extractLoopPath(V3EdgeFuncP edgeFuncp,
+                                                      V3GraphVertex* vertexp) {
+    return GraphAlgExtractLoop{this, edgeFuncp, vertexp}.path();
+}
+
+//######################################################################
 //######################################################################
 // Algorithms - subtrees
 // Changes user()
