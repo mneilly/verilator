@@ -93,7 +93,8 @@ class StructFieldAnalyzer final : public VNVisitor {
     bool m_inLValue = false;
 
     // Get bit position for a field in a struct (max 64 fields supported)
-    uint32_t getFieldBitPosition(const AstNodeUOrStructDType* structDtp, const std::string& fieldName) {
+    uint32_t getFieldBitPosition(const AstNodeUOrStructDType* structDtp,
+                                 const std::string& fieldName) {
         uint32_t bitPos = 0;
         for (const AstMemberDType* memberp = structDtp->membersp(); memberp;
              memberp = VN_AS(memberp->nextp(), MemberDType)) {
@@ -109,7 +110,7 @@ class StructFieldAnalyzer final : public VNVisitor {
 
     // Get all field names from a struct
     void extractFieldNames(const AstNodeUOrStructDType* structDtp,
-                          std::vector<std::string>& fieldNames) {
+                           std::vector<std::string>& fieldNames) {
         for (const AstMemberDType* memberp = structDtp->membersp(); memberp;
              memberp = VN_AS(memberp->nextp(), MemberDType)) {
             if (fieldNames.size() >= 64) break;
@@ -148,10 +149,10 @@ class StructFieldAnalyzer final : public VNVisitor {
                     usage.structVscp = varrefp->varScopep();
                     extractFieldNames(structDtp, usage.fieldNames);
                 }
-                
+
                 const uint32_t fieldBit = getFieldBitPosition(structDtp, nodep->name());
                 const uint64_t fieldMask = 1ULL << fieldBit;
-                
+
                 if (nodep->access().isWriteOrRW()) {
                     usage.fieldsWritten |= fieldMask;
                 } else {
@@ -162,14 +163,10 @@ class StructFieldAnalyzer final : public VNVisitor {
         iterateChildren(nodep);
     }
 
-    void visit(AstNode* nodep) override {
-        iterateChildren(nodep);
-    }
+    void visit(AstNode* nodep) override { iterateChildren(nodep); }
 
 public:
-    explicit StructFieldAnalyzer(AstNode* nodep) {
-        iterate(nodep);
-    }
+    explicit StructFieldAnalyzer(AstNode* nodep) { iterate(nodep); }
     ~StructFieldAnalyzer() = default;
 };
 
@@ -202,14 +199,12 @@ AstCFunc* V3Order::order(AstNetlist* netlistp,  //
                          const ExternalDomainsProvider& externalDomains) {
     // Build the OrderGraph
     const std::unique_ptr<OrderGraph> graph = buildOrderGraph(netlistp, logic, trigToSen);
-    
+
     // Analyze struct field usage for runtime diagnostics (VL_DEBUG only)
     for (auto* const lbsp : logic) {
-        lbsp->foreachLogic([](AstNode* logicp) {
-            StructFieldAnalyzer{logicp};
-        });
+        lbsp->foreachLogic([](AstNode* logicp) { StructFieldAnalyzer{logicp}; });
     }
-    
+
     // Order it
     orderOrderGraph(*graph, tag);
     // Assign sensitivity domains to combinational logic

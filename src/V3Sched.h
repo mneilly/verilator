@@ -413,20 +413,20 @@ AstIf* createIfFromSenTree(AstSenTree* senTreep);
 
 // Structure to hold cycle path information for runtime diagnostics
 struct CyclePathInfo final {
-    std::vector<AstVarScope*> path;       // Variables in the cycle
-    std::vector<FileLine*> locations;     // Where each dependency occurs
-    bool involvesStruct = false;          // Does path include structs?
+    std::vector<AstVarScope*> path;  // Variables in the cycle
+    std::vector<FileLine*> locations;  // Where each dependency occurs
+    bool involvesStruct = false;  // Does path include structs?
 };
 
 // Structure to track struct field usage for runtime diagnostics
 struct StructFieldUsage final {
-    AstVarScope* structVscp;              // The struct variable
-    uint64_t fieldsRead = 0;              // Bitmask of fields read in this block
-    uint64_t fieldsWritten = 0;           // Bitmask of fields written in this block
-    uint64_t fieldsInSensitivity = 0;     // Bitmask of fields in sensitivity (0xFFFF = whole struct)
-    FileLine* blockLocation = nullptr;     // Where this block is defined
+    AstVarScope* structVscp;  // The struct variable
+    uint64_t fieldsRead = 0;  // Bitmask of fields read in this block
+    uint64_t fieldsWritten = 0;  // Bitmask of fields written in this block
+    uint64_t fieldsInSensitivity = 0;  // Bitmask of fields in sensitivity (0xFFFF = whole struct)
+    FileLine* blockLocation = nullptr;  // Where this block is defined
     std::vector<std::string> fieldNames;  // Field names (index = bit position)
-    
+
     bool hasUselessTriggers() const {
         // Check if sensitivity includes fields not actually used
         return (fieldsInSensitivity & ~fieldsRead) != 0;
@@ -436,7 +436,8 @@ struct StructFieldUsage final {
 // Global storage for cycle paths (populated during scheduling, emitted during code generation)
 extern std::vector<CyclePathInfo> g_cyclePaths;
 
-// Global storage for struct field usage (populated during ordering, emitted during code generation)
+// Global storage for struct field usage (populated during ordering, emitted during code
+// generation)
 extern std::map<AstVarScope*, StructFieldUsage> g_structFieldUsage;
 
 }  // namespace V3Sched

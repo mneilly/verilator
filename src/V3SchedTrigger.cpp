@@ -344,7 +344,7 @@ AstNodeStmt* TriggerKit::newDumpCall(AstVarScope* const vscp, const std::string&
     callp->addArgsp(new AstVarRef{flp, vscp, VAccess::READ});
     callp->addArgsp(new AstConst{flp, AstConst::String{}, tag});
     callp->dtypeSetVoid();
-    
+
     AstCStmt* const cstmtp = new AstCStmt{flp};
     cstmtp->add("#ifdef VL_DEBUG\n");
     if (debugOnly) {
@@ -355,7 +355,7 @@ AstNodeStmt* TriggerKit::newDumpCall(AstVarScope* const vscp, const std::string&
         cstmtp->add(callp->makeStmt());
     }
     cstmtp->add("#endif\n");
-    
+
     // Store the unconditional VL_DEBUG-wrapped call as next statement for checkIterationLimit
     // This allows convergence failure diagnostics to show trigger info when VL_DEBUG is enabled
     AstCStmt* const unconditionalp = new AstCStmt{flp};
@@ -364,7 +364,7 @@ AstNodeStmt* TriggerKit::newDumpCall(AstVarScope* const vscp, const std::string&
     unconditionalp->add(callp->cloneTree(false)->makeStmt());
     unconditionalp->add("#endif\n");
     cstmtp->addNext(unconditionalp);
-    
+
     return cstmtp;
 }
 
@@ -607,9 +607,7 @@ TriggerKit TriggerKit::create(AstNetlist* netlistp,  //
         ss << ")";
         // Add file location information
         const FileLine* const sflp = senItemp->fileline();
-        if (sflp) {
-            ss << " at " << sflp->filename() << ":" << sflp->lineno();
-        }
+        if (sflp) { ss << " at " << sflp->filename() << ":" << sflp->lineno(); }
         std::string desc = VString::quoteBackslash(ss.str());
         desc = VString::replaceSubstr(desc, "\n", "\\n");
         addDebug(i, desc);

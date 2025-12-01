@@ -89,13 +89,11 @@ AstNodeStmt* checkIterationLimit(AstNetlist* netlistp, const string& name, AstVa
     AstNodeExpr* const condp = new AstGt{flp, counterRefp, constp};
     AstIf* const ifp = new AstIf{flp, condp};
     ifp->branchPred(VBranchPred::BP_UNLIKELY);
-    
+
     // Use the unconditional dump call (stored as next statement) to show trigger info
     // when convergence fails, so users can see which RTL paths caused the cycle
-    if (dumpCallp && dumpCallp->nextp()) {
-        ifp->addThensp(dumpCallp->nextp()->cloneTree(false));
-    }
-    
+    if (dumpCallp && dumpCallp->nextp()) { ifp->addThensp(dumpCallp->nextp()->cloneTree(false)); }
+
     // Add cycle path diagnostics (VL_DEBUG only)
     AstCStmt* const cycleStmt = new AstCStmt{flp};
     cycleStmt->add("#ifdef VL_DEBUG\n");
@@ -103,21 +101,18 @@ AstNodeStmt* checkIterationLimit(AstNetlist* netlistp, const string& name, AstVa
     cycleStmt->add("__VlPrintStructFieldIssues();\n");
     cycleStmt->add("#endif\n");
     ifp->addThensp(cycleStmt);
-    
+
     AstCStmt* const stmtp = new AstCStmt{flp};
     ifp->addThensp(stmtp);
     const FileLine* const locp = netlistp->topModulep()->fileline();
     const std::string& file = VIdProtect::protect(locp->filename());
     const std::string& line = std::to_string(locp->lineno());
-    stmtp->add("VL_FATAL_MT(\"" + V3OutFormatter::quoteNameControls(file) + "\", " + line
-               + ", \"\", \"" + name + " region did not converge after " + std::to_string(limit)
-               + " tries.\\n"
-               + "Verilator identified signal(s) involved in combinational cycles.\\n"
-               + "Review compiler warnings (UNOPTFLAT) for cycle path details.\\n"
-               + "#ifdef VL_DEBUG\\n"
-               + "See above for detailed cycle path trace.\\n"
-               + "#endif\\n"
-               + "\");");
+    stmtp->add(
+        "VL_FATAL_MT(\"" + V3OutFormatter::quoteNameControls(file) + "\", " + line + ", \"\", \""
+        + name + " region did not converge after " + std::to_string(limit) + " tries.\\n"
+        + "Verilator identified signal(s) involved in combinational cycles.\\n"
+        + "Review compiler warnings (UNOPTFLAT) for cycle path details.\\n" + "#ifdef VL_DEBUG\\n"
+        + "See above for detailed cycle path trace.\\n" + "#endif\\n" + "\");");
     return ifp;
 }
 

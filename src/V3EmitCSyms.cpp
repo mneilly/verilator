@@ -609,7 +609,7 @@ void EmitCSyms::emitCyclePaths() {
     puts("#ifdef VL_DEBUG\n");
     puts("// Cycle path information for runtime diagnostics\n");
     puts("\n");
-    
+
     // Emit the path entry structure
     puts("struct VlCyclePathEntry {\n");
     puts("    const char* varName;\n");
@@ -621,43 +621,43 @@ void EmitCSyms::emitCyclePaths() {
     // Emit all path entries
     int entryIdx = 0;
     std::vector<int> cycleStarts;  // Track where each cycle starts
-    
+
     for (const V3Sched::CyclePathInfo& pathInfo : cyclePaths) {
         if (pathInfo.path.empty()) continue;
-        
+
         cycleStarts.push_back(entryIdx);
         const size_t pathSize = pathInfo.path.size();
-        
+
         for (size_t i = 0; i < pathSize; ++i) {
             const AstVarScope* vscp = pathInfo.path[i];
             const FileLine* flp = pathInfo.locations[i];
-            
+
             std::string varName = vscp->prettyName();
-            std::string location = flp ? (flp->filename() + ":" + std::to_string(flp->lineno())) 
-                                       : "unknown";
-            
+            std::string location
+                = flp ? (flp->filename() + ":" + std::to_string(flp->lineno())) : "unknown";
+
             // Escape quotes in names and locations
             varName = V3OutFormatter::quoteNameControls(varName);
             location = V3OutFormatter::quoteNameControls(location);
-            
+
             // Calculate next entry index (wraps back to start for cycle)
             const int nextIdx = (i + 1 < pathSize) ? (entryIdx + 1) : cycleStarts.back();
-            
+
             if (i == 0) {
-                puts("static const VlCyclePathEntry __VlCyclePaths_" 
+                puts("static const VlCyclePathEntry __VlCyclePaths_"
                      + std::to_string(cycleStarts.back()) + "[] = {\n");
             }
-            
+
             puts("    {\"" + varName + "\", \"" + location + "\", ");
             if (i + 1 < pathSize) {
-                puts("&__VlCyclePaths_" + std::to_string(cycleStarts.back()) + "[" 
+                puts("&__VlCyclePaths_" + std::to_string(cycleStarts.back()) + "["
                      + std::to_string(i + 1) + "]");
             } else {
                 // Last entry points back to first (cycle)
                 puts("&__VlCyclePaths_" + std::to_string(cycleStarts.back()) + "[0]");
             }
             puts("},\n");
-            
+
             entryIdx++;
         }
         puts("};\n");
@@ -690,14 +690,14 @@ void EmitCSyms::emitCyclePaths() {
     puts("    VL_DBG_MSGF(\"\\n\");\n");
     puts("}\n");
     puts("\n");
-    
+
     puts("#endif  // VL_DEBUG\n");
     puts("\n");
 }
 
 void EmitCSyms::emitStructFieldUsage() {
     // Emit struct field usage information for runtime diagnostics (VL_DEBUG only)
-    const std::map<AstVarScope*, V3Sched::StructFieldUsage>& fieldUsage 
+    const std::map<AstVarScope*, V3Sched::StructFieldUsage>& fieldUsage
         = V3Sched::g_structFieldUsage;
     if (fieldUsage.empty()) return;
 
@@ -705,7 +705,7 @@ void EmitCSyms::emitStructFieldUsage() {
     puts("#ifdef VL_DEBUG\n");
     puts("// Struct field usage information for cycle diagnostics\n");
     puts("\n");
-    
+
     // Emit the field info structure
     puts("struct VlStructFieldInfo {\n");
     puts("    const char* structName;\n");
@@ -722,8 +722,8 @@ void EmitCSyms::emitStructFieldUsage() {
     for (const auto& pair : fieldUsage) {
         const V3Sched::StructFieldUsage& usage = pair.second;
         if (usage.fieldNames.empty()) continue;
-        
-        puts("static const char* const __VlStructFieldNames_" + std::to_string(structIdx) 
+
+        puts("static const char* const __VlStructFieldNames_" + std::to_string(structIdx)
              + "[] = {\n");
         for (const std::string& name : usage.fieldNames) {
             puts("    \"" + V3OutFormatter::quoteNameControls(name) + "\",\n");
@@ -740,23 +740,24 @@ void EmitCSyms::emitStructFieldUsage() {
     for (const auto& pair : fieldUsage) {
         const AstVarScope* vscp = pair.first;
         const V3Sched::StructFieldUsage& usage = pair.second;
-        
+
         if (usage.fieldNames.empty()) continue;
-        
+
         std::string structName = vscp->prettyName();
-        std::string location = usage.blockLocation 
-            ? (usage.blockLocation->filename() + ":" + std::to_string(usage.blockLocation->lineno()))
-            : "unknown";
-        
+        std::string location = usage.blockLocation
+                                   ? (usage.blockLocation->filename() + ":"
+                                      + std::to_string(usage.blockLocation->lineno()))
+                                   : "unknown";
+
         structName = V3OutFormatter::quoteNameControls(structName);
         location = V3OutFormatter::quoteNameControls(location);
-        
+
         puts("    {\"" + structName + "\", \"" + location + "\", ");
         puts("0x" + cvtToHex(usage.fieldsRead) + "ULL, ");
         puts("0x" + cvtToHex(usage.fieldsInSensitivity) + "ULL, ");
         puts("__VlStructFieldNames_" + std::to_string(structIdx) + ", ");
         puts(std::to_string(usage.fieldNames.size()) + "},\n");
-        
+
         structIdx++;
     }
     puts("    {nullptr, nullptr, 0, 0, nullptr, 0}  // Sentinel\n");
@@ -796,7 +797,7 @@ void EmitCSyms::emitStructFieldUsage() {
     puts("    if (foundIssues) VL_DBG_MSGF(\"\\n\");\n");
     puts("}\n");
     puts("\n");
-    
+
     puts("#endif  // VL_DEBUG\n");
     puts("\n");
 }
@@ -1148,10 +1149,10 @@ void EmitCSyms::emitSymImp(const AstNetlist* netlistp) {
 
     openNewOutputSourceFile(symClassName(), true, true, "Symbol table implementation internals");
     emitSymImpPreamble();
-    
+
     // Emit cycle path information for debugging
     emitCyclePaths();
-    
+
     // Emit struct field usage information for debugging
     emitStructFieldUsage();
 

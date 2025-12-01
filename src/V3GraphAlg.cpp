@@ -469,7 +469,7 @@ public:
 };
 
 std::vector<V3GraphVertex*> V3Graph::extractLoopPath(V3EdgeFuncP edgeFuncp,
-                                                      V3GraphVertex* vertexp) {
+                                                     V3GraphVertex* vertexp) {
     return GraphAlgExtractLoop{this, edgeFuncp, vertexp}.path();
 }
 

@@ -347,25 +347,23 @@ void reportCycles(Graph* graphp, const std::vector<SchedAcyclicVarVertex*>& cutV
         // Extract cycle path information for runtime diagnostics
         const std::vector<V3GraphVertex*> cyclePath
             = graphp->extractLoopPath(&V3GraphEdge::followAlwaysTrue, vvtxp);
-        
+
         if (!cyclePath.empty()) {
             CyclePathInfo pathInfo;
             bool involvesStruct = false;
-            
+
             for (V3GraphVertex* vtxp : cyclePath) {
                 if (SchedAcyclicVarVertex* varvtxp = vtxp->cast<SchedAcyclicVarVertex>()) {
                     pathInfo.path.push_back(varvtxp->vscp());
                     pathInfo.locations.push_back(varvtxp->vscp()->fileline());
-                    
+
                     // Check if this variable is a struct
                     AstNodeDType* const dtypep = varvtxp->varp()->dtypep()->skipRefp();
-                    if (VN_IS(dtypep, NodeUOrStructDType)) {
-                        involvesStruct = true;
-                    }
+                    if (VN_IS(dtypep, NodeUOrStructDType)) { involvesStruct = true; }
                 }
             }
             pathInfo.involvesStruct = involvesStruct;
-            
+
             // Store for code emission
             g_cyclePaths.push_back(pathInfo);
         }
